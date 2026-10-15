@@ -1,10 +1,7 @@
 """
 Headless CLI on the same core (field laptop, no browser needed).
-
-  python -m modbuskit.cli sweep --port COM5 --profile profiles/ge_multilin_rrtd.yaml
   python -m modbuskit.cli sweep --port COM5 --units 12 254 1 --full
   python -m modbuskit.cli read  --tcp 10.0.0.50 --unit 1 --fc 3 --addr 0 --count 10
-  python -m modbuskit.cli read  --rtu-tcp 10.0.0.60:10001 --unit 254 --profile profiles/ge_multilin_rrtd.yaml
   python -m modbuskit.cli read  --port COM5 --baud 19200 --parity N --unit 254 --addr 0x1010 --count 9
 """
 from __future__ import annotations

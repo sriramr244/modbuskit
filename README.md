@@ -70,15 +70,11 @@ If one bad address makes a merged block return "illegal address", that block aut
 ## Device profiles
 
 `profiles/*.yaml` hold only device knowledge: the register map, enums, the default unit ID, the register to probe during scans, and likely serial settings.
-`ge_multilin_rrtd.yaml` carries the comms setpoints from your RRTD script, with addresses from manual 1601-0104-B7.
-It doesn't include the RTD temperature registers yet. Add those from Table 8-1.
 
 ## CLI (same core, no browser)
 
 ```
-python -m modbuskit.cli sweep --port COM5 --profile profiles/ge_multilin_rrtd.yaml
 python -m modbuskit.cli read --tcp 10.0.0.50 --unit 1 --fc 3 --addr 0 --count 10
-python -m modbuskit.cli read --rtu-tcp 10.0.0.60:10001 --unit 254 --profile profiles/ge_multilin_rrtd.yaml
 ```
 
 ## Notes
