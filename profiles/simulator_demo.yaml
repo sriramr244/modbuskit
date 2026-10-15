@@ -1,0 +1,12 @@
+# Matches `python -m modbuskit.sim` - use it to try polling/trending with no hardware.
+name: Simulator demo
+description: Live test values served by modbuskit.sim
+defaults:
+  unit_id: 1
+probe: {fc: 3, address: 0, count: 1}
+tags:
+  - {name: sine_x1000,     address: 100, dtype: int16, scale: 0.001}
+  - {name: temp_abcd,      address: 101, dtype: float32, order: ABCD, units: degC}
+  - {name: temp_cdab,      address: 103, dtype: float32, order: CDAB, units: degC}
+  - {name: counter,        address: 0,   fc: 4}
+  - {name: sine_positive,  address: 0,   fc: 2}
