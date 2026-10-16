@@ -41,7 +41,7 @@ Addresses start at zero: FC3 address `0` corresponds to holding register `40001`
 ## Tabs
 
 | Tab | What it does |
-|---|---|
+| --- | --- |
 | Poll | Shows tag values, raw data, status, sample age, communication counters, round-trip times, and the read plan. Can log readings to CSV in `logs/`. |
 | Trend | Plots numeric tags together or separately, shows minimum, maximum, mean, and standard deviation, and exports history to CSV. |
 | Tags | Edits tag addresses, unit IDs, function codes, data types, word order, scaling, and value labels. Supports signed and unsigned 16/32/64-bit integers, float32/64, hex, binary, and strings. |
@@ -61,7 +61,7 @@ Addresses start at zero: FC3 address `0` corresponds to holding register `40001`
 Transport, framing, polling, and the UI live in separate modules:
 
 | File | Responsibility |
-|---|---|
+| --- | --- |
 | `modbuskit/transport.py` | Serial ports and TCP sockets. |
 | `modbuskit/client.py` | RTU and TCP request handling, including CRC checks, timing, echo removal, and transaction IDs. |
 | `modbuskit/framing.py` | Request and response PDUs for FC01–06, 15, 16, and 43, including exceptions. |
