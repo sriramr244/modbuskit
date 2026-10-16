@@ -300,8 +300,9 @@ with st.sidebar:
 # tabs (code order != display order: Tags runs first so ss.tags is current)
 # ======================================================================
 
-tab_poll, tab_trend, tab_tags, tab_scan, tab_write, tab_traffic = st.tabs(
-    ["Poll", "Trend", "Tags", "Scan", "Write", "Traffic"])
+tab_poll, tab_trend, tab_tags, tab_scan, tab_write, tab_traffic, tab_notifications = st.tabs(
+    ["Poll", "Trend", "Tags", "Scan", "Write", "Traffic", "Notifications"])
+
 
 # ---------------------------------------------------------------- Tags
 with tab_tags:
@@ -697,3 +698,7 @@ with tab_traffic:
                 hide_index=True, width="stretch", height=600)
 
         traffic()
+
+with tab_notifications:
+    if need_client():
+        st.subheader("Notification list")

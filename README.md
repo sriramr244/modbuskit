@@ -1,90 +1,104 @@
+````markdown
 # ModbusKit
 
-A generic Modbus master you can point at any device, like Modbus Poll, with trending, scanning, and a Streamlit UI.
-It supports **Modbus RTU (serial)**, **Modbus RTU over TCP** (Lantronix/Moxa raw-socket ports), and **Modbus TCP/IP**.
-It's read-only by default; writes need a sidebar toggle plus a confirm checkbox.
+ModbusKit is a Python tool for reading and writing Modbus devices. The Streamlit interface lets you poll registers, plot values, and scan for devices.
+
+It supports serial RTU, RTU over TCP (including Lantronix and Moxa raw-socket gateways), and Modbus TCP/IP. Writes are disabled by default. To write a value, enable writes in the sidebar and confirm the operation on the Write tab.
 
 ## Install and run
 
-```
+```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-No hardware? Start the bench simulator in a second terminal, then connect to `127.0.0.1:5020`:
+### Try it without hardware
 
-```
+Start the simulator in a second terminal:
+
+```bash
 python -m modbuskit.sim --tcp 5020                    # Modbus TCP
+```
+
+In the sidebar, select **Modbus TCP/IP**, set the host to `127.0.0.1` and the port to `5020`, then click **Connect**. Select `simulator_demo.yaml` under **Device profile** and click **Load profile tags**. On the Poll tab, click **Start polling**, then open Trend to plot the values.
+
+To try RTU over TCP instead, run:
+
+```bash
 python -m modbuskit.sim --tcp 5021 --framing rtu      # RTU over TCP
 ```
 
-Load the `simulator_demo.yaml` profile, then Poll → Start, then Trend.
+Select **Modbus RTU over TCP** in the sidebar and connect to `127.0.0.1:5021`.
 
-## Reading from any device (no profile needed)
+## Read registers without a profile
 
-1. Sidebar: pick a transport, enter the port or IP, set the default unit ID, and click Connect.
-2. Poll tab → **Read definition**: unit, function (01/02/03/04), start address, quantity, data type, and word order. Click **Replace tag list**.
-3. Click **Read once**, or **Start polling**. Use **Append** to stack more windows, including other unit IDs.
-4. Tags tab: rename rows and add scale, offset, units, or enums (`0=Off; 1=On`). **Export as profile YAML** saves the map for reuse.
+1. In the sidebar, choose a transport, enter the serial port or IP address, set the default unit ID, and click **Connect**.
+2. On the Poll tab, expand **Read definition**. Set the unit ID, function (01/02/03/04), start address, quantity, data type, and word order. Click **Replace tag list**.
+3. Click **Read once** for a single read or **Start polling** for repeated reads. Use **Append** to add more address ranges or unit IDs.
+4. On the Tags tab, rename tags and set their scale, offset, units, or value labels (`0=Off; 1=On`). Click **Export as profile YAML** to save the configuration.
 
-Addresses are **0-based protocol addresses**: FC3 address 0 = 40001. The Ref column shows the PLC-style reference.
+Addresses start at zero: FC3 address `0` corresponds to holding register `40001`. The Ref column shows the PLC-style reference.
 
 ## Tabs
 
 | Tab | What it does |
 |---|---|
-| Poll | Live table of every tag (value, raw, status, age), comm counters, RTT, read plan. Optional CSV log to `logs/`. |
-| Trend | Live line chart of any numeric tags (overlay or separate), min/max/mean/std, CSV export. |
-| Tags | Editable tag list: unit, FC, address, type (u/int16/32/64, float32/64, hex, binary, string), word order, scale/offset, enum. |
-| Scan | **Serial settings sweep** (baud × parity × stop bits × unit), **Unit ID scan**, **Register map** discovery (bisects refused chunks), **Device ID** (FC43/14), **IP subnet scan** for port 502. |
-| Write | FC05/06/15/16 with typed encoding (e.g. a float32 in CDAB → 2 registers) and read-back. |
-| Traffic | Raw TX/RX hex frames, like Modbus Poll's Communication window. |
+| Poll | Shows tag values, raw data, status, sample age, communication counters, round-trip times, and the read plan. Can log readings to CSV in `logs/`. |
+| Trend | Plots numeric tags together or separately, shows minimum, maximum, mean, and standard deviation, and exports history to CSV. |
+| Tags | Edits tag addresses, unit IDs, function codes, data types, word order, scaling, and value labels. Supports signed and unsigned 16/32/64-bit integers, float32/64, hex, binary, and strings. |
+| Scan | Tests serial settings and unit IDs, searches for readable register ranges, reads device identification (FC43/14), and scans an IP subnet for port 502. |
+| Write | Sends FC05/06/15/16 requests, encodes values using the selected type and word order, and optionally reads them back. For example, a float32 uses two registers. |
+| Traffic | Shows transmitted and received frames in hex. |
 
-Status meanings (same idea as your original sweep script):
-`TIMEOUT` = silence (wrong baud, unit ID, or wiring) · `GARBLED` = bytes came back with a bad CRC (baud probably right, check parity or polarity) ·
-`EXCEPTION` = the device is there but refused the request · `OTHER_UNIT` = a different unit ID answered.
+## Response statuses
 
-## How it is structured (and why)
+- `TIMEOUT`: No reply arrived before the timeout. Check the connection, serial settings, unit ID, and wiring.
+- `GARBLED`: A reply arrived but could not be validated, for example because of a bad CRC. Check serial settings and wiring.
+- `EXCEPTION`: The device returned a Modbus exception, such as an unsupported function or an invalid address.
+- `OTHER_UNIT`: The reply came from a different unit ID.
 
-The design idea: **each layer knows one thing**, so you can swap any of them without touching the others.
+## Project layout
 
-```
-transport.py   moves bytes            SerialTransport | TcpTransport
-client.py      Modbus framing         RTU (CRC, silence gaps, echo strip) | TCP (MBAP, transaction IDs)
-framing.py     PDUs                   build/parse FC01-06, 15, 16, 43; exceptions
-datatypes.py   registers <-> values   int/float/string, ABCD/CDAB/BADC/DCBA
-tags.py        named points           Tag + block planner (merges neighbours into few reads)
-poller.py      background loop        latest values, history ring buffer, stats, CSV
-scanner.py     discovery              serial sweep, unit IDs, register map, IP scan
-profiles.py    device knowledge       YAML only; the core never hard-codes a device
-app.py / cli.py                       front-ends: UI wiring only
-```
+Transport, framing, polling, and the UI live in separate modules:
 
-The three link types are just **transport × framing** combinations:
-RTU serial = Serial + RTU, RTU over TCP = TCP + RTU, Modbus TCP = TCP + TCP.
-That's why adding RTU over TCP cost zero new protocol code.
+| File | Responsibility |
+|---|---|
+| `modbuskit/transport.py` | Serial ports and TCP sockets. |
+| `modbuskit/client.py` | RTU and TCP request handling, including CRC checks, timing, echo removal, and transaction IDs. |
+| `modbuskit/framing.py` | Request and response PDUs for FC01–06, 15, 16, and 43, including exceptions. |
+| `modbuskit/datatypes.py` | Conversion between registers and values, with ABCD/CDAB/BADC/DCBA ordering. |
+| `modbuskit/tags.py` | Tag definitions and grouping nearby tags into read blocks. |
+| `modbuskit/poller.py` | Background polling, latest values, history, statistics, and CSV logging. |
+| `modbuskit/scanner.py` | Serial settings, unit ID, register map, and IP scans. |
+| `modbuskit/profiles.py` | Loading and exporting YAML device profiles. |
+| `app.py` / `modbuskit/cli.py` | Streamlit and command-line interfaces. |
 
-The block planner groups tags by (unit, FC), sorts them by address, and merges two tags when the gap between them is ≤ "Block merge gap".
-If one bad address makes a merged block return "illegal address", that block automatically splits into per-tag reads.
+Serial RTU uses the serial transport with RTU framing. RTU over TCP uses the TCP transport with RTU framing. Modbus TCP uses the TCP transport with TCP framing.
+
+The read planner groups tags by unit ID and function code, then combines nearby addresses according to **Block merge gap**. If a combined read fails with an illegal address or illegal value exception, the poller retries each tag separately.
 
 ## Device profiles
 
-`profiles/*.yaml` hold only device knowledge: the register map, enums, the default unit ID, the register to probe during scans, and likely serial settings.
+Files in `profiles/` store register maps, value labels, the default unit ID, scan probe addresses, and suggested serial settings. You can load a profile in the sidebar or create one by editing tags and exporting them as YAML.
 
-## CLI (same core, no browser)
+## Command line
 
-```
+Read ten holding registers starting at address zero:
+
+```bash
 python -m modbuskit.cli read --tcp 10.0.0.50 --unit 1 --fc 3 --addr 0 --count 10
 ```
 
-## Notes
+## Connection notes
 
-- One connection is open at a time. Polling, scans, and writes share it under a lock, so they never collide on the bus.
-- The serial sweep opens the port itself, so disconnect first.
-- Refreshing the browser tab releases a COM port held by the old session.
+- Polling, scans, and writes share the active connection. A lock serializes their requests.
+- Disconnect before running a serial settings sweep; the sweep opens the port itself.
+- Reconnecting to the same port or TCP endpoint closes the connection held by the previous session.
 
-## Future Implementation
-- Logging 
-- Adding a OPC UA implementation layer and converting this into a service to convert modbus into OPC UA data. 
-- Adding message based alerts and adding alarms creating an email service 
-- Adding error faults 
+## Planned work
+
+- Additional logging options beyond the existing CSV polling log.
+- An OPC UA service that exposes Modbus data.
+- Alarms and notifications, including email alerts.
+- Fault reporting.
+````
