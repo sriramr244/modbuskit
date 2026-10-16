@@ -1,4 +1,3 @@
-````markdown
 # ModbusKit
 
 ModbusKit is a Python tool for reading and writing Modbus devices. The Streamlit interface lets you poll registers, plot values, and scan for devices.
@@ -101,4 +100,3 @@ python -m modbuskit.cli read --tcp 10.0.0.50 --unit 1 --fc 3 --addr 0 --count 10
 - An OPC UA service that exposes Modbus data.
 - Alarms and notifications, including email alerts.
 - Fault reporting.
-````
