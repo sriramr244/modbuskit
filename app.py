@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import time
 from pathlib import Path
+import json
 
 import pandas as pd
 import streamlit as st
@@ -23,6 +24,7 @@ from modbuskit.profiles import load_profile, list_profiles, profile_to_yaml
 from modbuskit.scanner import COMMON_BAUDS
 from modbuskit.tags import Tag, tags_from_range
 from modbuskit.transport import list_serial_ports
+from modbuskit.settings import SETTINGS_PATH, load_settings, save_settings, delete_settings, tag_to_dicts, dicts_to_tag
 
 APP_DIR = Path(__file__).parent
 PROFILE_DIR = APP_DIR / "profiles"
@@ -44,11 +46,41 @@ DEFAULTS = {
     "bytesize": 8, "stopbits": 1, "strip_echo": False, "host": "192.168.1.100", "tcp_port": 502,
     "timeout": 1.0, "retries": 0, "unit": 1, "allow_writes": False,
     "interval": 1.0, "max_gap": 10, "csv_log": False, "refresh": 1.0,
+    "trend_win": "5 min", "trend_layout": "Overlay",
 }
+
+keys_to_persist =["mode", "port_sel", "port_manual", "baud", "parity", "bytesize", "stopbits", "strip_echo",
+                "host", "tcp_port", "timeout", "retries", "unit", "interval", "max_gap", "csv_log", "refresh",
+                "profile_name", "trend_sel", "trend_win", "trend_layout"]
+
+VALID_CHOICES = {"mode": list(MODES), "baud": ALL_BAUDS, "parity": ["N", "E", "O"], "bytesize": [7, 8],
+                 "stopbits": [1, 2], "trend_win": ["1 min", "5 min", "15 min", "1 h", "All"],
+                 "trend_layout": ["Overlay", "Separate"]}
+
+if "_cfg" not in ss:
+    ss._cfg = load_settings()
+    ss._cfg_saved = json.dumps(ss._cfg, sort_keys=True)
+    saved = ss._cfg
+    ss.tags = dicts_to_tag(saved.get("tags"))
+    if saved.get("profile_path") and Path(saved["profile_path"]).is_file():
+        try:
+            ss.profile = load_profile(saved["profile_path"])
+        except Exception:
+            pass
+
+#Documented streamlit work
+for k in keys_to_persist:
+    if k in ss:
+        ss[k] = ss[k]
+
+for k in keys_to_persist:
+    if k not in ss and k in ss._cfg:
+        if k in VALID_CHOICES and ss._cfg[k] not in VALID_CHOICES[k]:
+            continue
+        ss[k] = ss._cfg[k]
+
 for k, v in DEFAULTS.items():
     ss.setdefault(k, v)
-
-
 # ======================================================================
 # connection helpers
 # ======================================================================
@@ -292,6 +324,13 @@ with st.sidebar:
                    + (f"  \nSource: {ss.profile.source}" if ss.profile.source else ""))
 
     st.divider()
+    def reset_settings():
+        delete_settings()
+        for k in keys_to_persist + ["_cfg", "_cfg_saved", "tags", "tags_base", "profile"]:
+            ss.pop(k, None)
+        ss.tag_ver = ss.get("tag_ver", 0) + 1
+    st.button("Reset all settings", on_click=reset_settings, type="secondary", width="stretch",
+              help=f"Settings and tags are remembered in {SETTINGS_PATH}")
     st.toggle("Enable writes", key="allow_writes",
               help="Off = the tool is strictly read-only. Turn on only when you mean to change a live device.")
 
@@ -348,8 +387,9 @@ with tab_poll:
         poller = ss.poller
         running = poller is not None and poller.running
 
-        def start_poll():
-            stop_poller()
+        def start_poll(changed: bool = False):
+            if not changed:
+                stop_poller()
             csv_path = None
             if ss.csv_log:
                 LOG_DIR.mkdir(exist_ok=True)
@@ -375,7 +415,7 @@ with tab_poll:
         if not ss.tags:
             st.info("No tags yet - generate a register window or load a profile on the Tags tab.")
         if running and poller.signature != tag_signature(ss.tags, int(ss.unit)):
-            st.warning("Tag list or default unit changed - press Stop, then Start, to apply.")
+            start_poll(changed=True)
 
         @st.fragment(run_every=ss.refresh if running else None)
         def live_table():
@@ -407,8 +447,8 @@ with tab_poll:
             st.dataframe(df.style.map(lambda x: f"color: {STATUS_COLORS.get(x, 'inherit')}; font-weight: 600",
                                       subset=["status"]),
                          hide_index=True, width="stretch", height=min(38 + 35 * len(df), 700))
-            with st.expander(f"Read plan: {len(p.blocks)} request(s) per cycle, "
-                             f"last cycle {s['last_cycle_ms']:.0f} ms"):
+            with st.expander("Read plan"):
+                st.caption(f"{len(p.blocks)} request(s) per cycle, last cycle {s['last_cycle_ms']:.0f} ms")
                 st.dataframe(pd.DataFrame([{"unit": b.unit_id, "fc": b.fc, "start": b.start, "count": b.count,
                                             "tags": ", ".join(t.name for t in b.tags)} for b in p.blocks]),
                              hide_index=True, width="stretch")
@@ -426,7 +466,7 @@ with tab_trend:
         ss.setdefault("trend_sel", numeric[:4])
         ss.trend_sel = [n for n in ss.trend_sel if n in numeric]
         c[0].multiselect("Tags", numeric, key="trend_sel")
-        window = c[1].selectbox("Window", ["1 min", "5 min", "15 min", "1 h", "All"], index=1, key="trend_win")
+        window = c[1].selectbox("Window", ["1 min", "5 min", "15 min", "1 h", "All"], key="trend_win")
         layout = c[2].radio("Layout", ["Overlay", "Separate"], key="trend_layout", horizontal=True)
         seconds = {"1 min": 60, "5 min": 300, "15 min": 900, "1 h": 3600, "All": None}[window]
 
@@ -702,3 +742,17 @@ with tab_traffic:
 with tab_notifications:
     if need_client():
         st.subheader("Notification list")
+
+for k in keys_to_persist:
+    if k in ss:
+        ss._cfg[k] = ss[k]
+
+ss._cfg["tags"] = tag_to_dicts(ss.tags)
+ss._cfg["profile_path"] = ss.profile.path if ss.profile is not None and ss.profile.path else None
+_snapshot = json.dumps(ss._cfg, sort_keys=True, default=str)
+if _snapshot != ss.get("_cfg_saved"):
+    try:
+        save_settings(ss._cfg)
+        ss._cfg_saved = _snapshot
+    except OSError as e:
+        st.sidebar.caption(f"Could not save settings: {e}")
