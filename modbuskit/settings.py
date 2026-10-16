@@ -11,7 +11,8 @@ SETTINGS_PATH = Path(os.environ.get("MODBUSKIT_SETTINGS", Path.home() / ".modbus
 
 def load_settings(path: Path = SETTINGS_PATH) -> dict:
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError, ValueError):
         return {}
 
@@ -45,6 +46,6 @@ def dicts_to_tag(dicts: list[dict]) -> list[Tag]:
             if d.get("enum"):
                 d["enum"] = {int(k): v for k, v in d["enum"].items()}
             out.append(Tag(**d))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             continue
     return out
