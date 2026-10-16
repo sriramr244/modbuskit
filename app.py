@@ -387,14 +387,16 @@ with tab_poll:
         poller = ss.poller
         running = poller is not None and poller.running
 
-        def start_poll(changed: bool = False):
-            if not changed:
-                stop_poller()
+        def start_poll(keep_history: bool = False):
+            old = ss.poller
+            stop_poller()
             csv_path = None
             if ss.csv_log:
                 LOG_DIR.mkdir(exist_ok=True)
                 csv_path = str(LOG_DIR / f"poll_{dt.datetime.now():%Y%m%d_%H%M%S}.csv")
             p = Poller(ss.client, ss.tags, int(ss.unit), ss.interval, csv_path=csv_path, max_gap=int(ss.max_gap))
+            if keep_history and old is not None:
+                p.history.extend(old.history)
             p.start()
             ss.poller = p
             _registry().setdefault(_conn_key(), {"client": ss.client})["poller"] = p
@@ -415,7 +417,10 @@ with tab_poll:
         if not ss.tags:
             st.info("No tags yet - generate a register window or load a profile on the Tags tab.")
         if running and poller.signature != tag_signature(ss.tags, int(ss.unit)):
-            start_poll(changed=True)
+            if tag_errors:
+                st.warning("Tag list has errors (see tags tab)- fix them before polling.")
+            else:
+                start_poll(keep_history=True)
 
         @st.fragment(run_every=ss.refresh if running else None)
         def live_table():
