@@ -1,5 +1,5 @@
 # ModbusKit
-# DISCLAIMER UTILIZED AI TO MAKE MULTITHREADED SYSTEM, TO CREATE SIM, TO WRITE README
+# DISCLAIMER: UTILIZED AI TO MAKE MULTITHREADED SYSTEM, TO CREATE SIM, TO WRITE README
 
 ModbusKit is a Python tool for reading and writing Modbus devices. The Streamlit interface lets you poll registers, plot values, and scan for devices.
 
